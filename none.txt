@@ -1,0 +1,87 @@
+import streamlit as st
+import openai
+from dotenv import load_dotenv
+import os
+import time
+
+# Load environment variables from .env file
+load_dotenv()
+
+# Get OpenAI API key from environment variable
+openai_api_key = os.getenv("OPENAI_API_KEY")
+
+# Set OpenAI API key
+openai.api_key = openai_api_key
+
+# Streamlit app configuration
+st.set_page_config(page_title="ChatGPT", page_icon=":speech_balloon:")
+
+# Initialize session state variables
+if "start_chat" not in st.session_state:
+    st.session_state.start_chat = False
+if "thread_id" not in st.session_state:
+    st.session_state.thread_id = None
+if "messages" not in st.session_state:
+    st.session_state.messages = []
+
+# Function to handle creating a new thread
+def create_thread():
+    try:
+        response = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo-16k",
+            messages=[{"role": "system", "content": "Start a new conversation."}]
+        )
+        thread_id = response["id"]
+        return thread_id
+    except openai.error.RateLimitError:
+        st.error("Rate limit exceeded. Please try again later.")
+        return None
+
+# Function to get response from the assistant
+def get_assistant_response(thread_id, user_input):
+    try:
+        messages = st.session_state.messages + [{"role": "user", "content": user_input}]
+        response = openai.ChatCompletion.create(
+            model="gpt-4-1106-preview",
+            messages=messages
+        )
+        assistant_message = response.choices[0].message["content"]
+        return assistant_message
+    except openai.error.RateLimitError:
+        st.error("Rate limit exceeded. Please try again later.")
+        return "Rate limit exceeded. Please try again later."
+
+# Sidebar to start chat
+if st.sidebar.button("Start Chat"):
+    st.session_state.start_chat = True
+    st.session_state.thread_id = create_thread()
+    st.session_state.messages = []
+
+# Button to exit chat
+if st.button("Exit Chat"):
+    st.session_state.start_chat = False
+    st.session_state.thread_id = None
+    st.session_state.messages = []
+
+# Main app
+st.title("ChatGPT-like Chatbot")
+
+if st.session_state.start_chat:
+    # Display existing messages
+    for message in st.session_state.messages:
+        with st.chat_message(message["role"]):
+            st.markdown(message["content"])
+
+    # Input for user prompt
+    if prompt := st.chat_input("Your message:"):
+        st.session_state.messages.append({"role": "user", "content": prompt})
+        with st.chat_message("user"):
+            st.markdown(prompt)
+
+        if st.session_state.thread_id:
+            assistant_response = get_assistant_response(st.session_state.thread_id, prompt)
+            st.session_state.messages.append({"role": "assistant", "content": assistant_response})
+            with st.chat_message("assistant"):
+                st.markdown(assistant_response)
+else:
+    st.write("Click the button in the sidebar to start the chat.")
